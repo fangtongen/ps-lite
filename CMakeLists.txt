@@ -1,9 +1,20 @@
 cmake_minimum_required(VERSION 3.4)
 
+# 编译 rm -rf ./build |  cmake -B ./build -S . && cmake --build ./build
+
 project(pslite C CXX)
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+# todo：为了让 cmake 能够找到对应的 protoc 并使用其对应的 include 文件，设置如下配置。需要根据自己的实际情况修改；
+set(CMAKE_PREFIX_PATH "/opt/homebrew/opt/protobuf@21")
+include_directories(BEFORE "/opt/homebrew/opt/protobuf@21/include")
+set(PROTOBUF_GENERATE_CPP_APPEND_PATH ON) # 打开后生成的 cpp 文件和 proto 文件目录结构一样，否则会都会放到 CMAKE_CURRENT_BINARY_DIR 下
+
+find_package(Protobuf REQUIRED)
+message(WARNING "protobuf_version: " ${Protobuf_VERSION} ", protobuf_library: " ${PROTOBUF_LIBRARY})
+
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/Modules)
 
 add_library(pslite)
@@ -12,14 +23,14 @@ if(POLICY CMP0074)  # Support Protobuf_ROOT etc environment variables on CMake 3
   cmake_policy(SET CMP0074 NEW)
 endif()
 
-# ---[ zmq
+# zmq
 find_package(ZMQ)
 if(NOT ZMQ_FOUND)
   cmake_minimum_required(VERSION 3.11)
   include(FetchContent)
   FetchContent_Declare(zmq
-    URL https://github.com/zeromq/libzmq/releases/download/v4.3.2/zeromq-4.3.2.zip
-    URL_HASH SHA256=d01517983ded9ff1b6c40f8206fc2b44ac96157a5aea7b974e8b0079547edfda)
+          URL https://github.com/zeromq/libzmq/releases/download/v4.3.2/zeromq-4.3.2.zip
+          URL_HASH SHA256=d01517983ded9ff1b6c40f8206fc2b44ac96157a5aea7b974e8b0079547edfda)
   FetchContent_GetProperties(zmq)
   if(NOT zmq_POPULATED)
     FetchContent_Populate(zmq)
@@ -36,12 +47,6 @@ else()
   target_link_libraries(pslite PUBLIC ${ZMQ_LIBRARIES})
 endif()
 
-# ---[ Google-protobuf
-# Workaround broken DLAMI. DLAMI ships a broken protoc at /home/ubuntu/anaconda3/bin
-# https://docs.aws.amazon.com/dlami/latest/devguide/overview-base.html
-set(CMAKE_IGNORE_PATH "/home/ubuntu/anaconda3/bin")
-set(PROTOBUF_GENERATE_CPP_APPEND_PATH TRUE)
-find_package(Protobuf REQUIRED)
 target_link_libraries(pslite PUBLIC ${PROTOBUF_LIBRARY})
 target_include_directories(pslite PUBLIC ${PROTOBUF_INCLUDE_DIR})
 
@@ -54,6 +59,7 @@ target_include_directories(pslite PUBLIC ${CMAKE_CURRENT_BINARY_DIR})  # PROTO_H
 # Generate protobuf python interface
 protobuf_generate_python(PROTO_PYS ${PROTO_FILES})
 add_custom_target(proto_python ALL DEPENDS ${PROTO_PYS})
+message(WARNING ${PROTO_FILES})
 add_dependencies(pslite proto_python)
 
 if(MSVC)
@@ -64,8 +70,8 @@ if(MSVC)
   target_include_directories(pslite PRIVATE "${PROJECT_SOURCE_DIR}/src/windows")
   target_link_libraries(pslite PUBLIC "ipHlpApi.lib" "ws2_32.lib")
   foreach(flag_var
-      CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE
-      CMAKE_CXX_FLAGS_MINSIZEREL CMAKE_CXX_FLAGS_RELWITHDEBINFO)
+          CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE
+          CMAKE_CXX_FLAGS_MINSIZEREL CMAKE_CXX_FLAGS_RELWITHDEBINFO)
     if(${flag_var} MATCHES "/MD")
       string(REGEX REPLACE "/MD" "/MT" ${flag_var} "${${flag_var}}")
     endif(${flag_var} MATCHES "/MD")
